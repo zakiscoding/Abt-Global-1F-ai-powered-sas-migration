@@ -14,6 +14,7 @@
 |  Haluk Yuzukirmizi |  @hyuzukirmizi  |  Contributor  |
 |  James Lacoste      | @JLac17    | Contributor          |
 |  Varun Kini    | @vkini19    | Contributor    |
+| Zakariye Mohamed | [@zakiscoding](https://github.com/zakiscoding) | Contributor |
 
 
 ---
