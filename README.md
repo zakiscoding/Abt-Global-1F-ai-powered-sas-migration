@@ -16,6 +16,22 @@
 |  Varun Kini    | @vkini19    | Contributor    |
 | Zakariye Mohamed | [@zakiscoding](https://github.com/zakiscoding) | Contributor |
 
+### Python migration prototype
+
+The repository now includes a deterministic Python foundation under `src/migration`.
+Run the initial pipeline with:
+
+```powershell
+python -m pytest -q
+python run_pipeline.py
+```
+
+The pipeline loads the supplied Hospital Compare CSV, applies SAS-compatible
+measure standardization and direction handling, calculates the five domain
+scores, and writes intermediate outputs to `outputs/`. The supplied SAS CSV
+outputs remain the validation ground truth; the comparison utilities in
+`src/migration/validation.py` are used to measure schema and numeric agreement.
+
 
 ---
 
