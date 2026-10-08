@@ -143,6 +143,62 @@ def calculate_summary(groups: dict[str, pd.DataFrame]) -> pd.DataFrame:
     return scores
 
 
+def assign_stars(summary: pd.DataFrame, groups: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    result = summary.copy()
+    counts = {}
+    for key, group in groups.items():
+        label = {
+            "OUTCOME_MORTALITY": "Outcomes_Mortality_cnt",
+            "OUTCOME_SAFETY": "Outcomes_safety_cnt",
+            "OUTCOME_READMISSION": "Outcomes_Readmission_cnt",
+            "PTEXP": "Patient_Experience_cnt",
+            "PROCESS": "Process_cnt",
+        }[key]
+        counts[label] = group["total_cnt"].to_numpy()
+    for label, values in counts.items():
+        result[label] = values
+    qualifying = pd.DataFrame(counts).ge(3)
+    result["Total_measure_group_cnt"] = qualifying.sum(axis=1)
+    result["MortSafe_group_cnt"] = (
+        qualifying["Outcomes_Mortality_cnt"] + qualifying["Outcomes_safety_cnt"]
+    )
+    result["report_indicator"] = (
+        (result["Total_measure_group_cnt"] >= 3)
+        & (result["MortSafe_group_cnt"] >= 1)
+    ).astype("int64")
+    result["cnt_grp"] = result["Total_measure_group_cnt"].map({
+        3: "1) # of groups=3",
+        4: "2) # of groups=4",
+        5: "3) # of groups=5",
+    })
+    result["star"] = np.nan
+    eligible = result["report_indicator"].eq(1) & result["summary_score"].notna()
+    for _, indices in result.loc[eligible].groupby("cnt_grp").groups.items():
+        scores = result.loc[indices, "summary_score"].sort_values()
+        buckets = pd.qcut(scores.rank(method="first"), q=5, labels=False, duplicates="drop")
+        result.loc[buckets.index, "star"] = buckets.astype(float).to_numpy() + 1
+    return result
+
+
+def national_averages(stars: pd.DataFrame, groups: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    eligible = stars[stars["report_indicator"].eq(1)]
+    row = {
+        "Summary_Score_Nat": eligible["summary_score"].mean(),
+        "Summary_Score_Nat_peer3": eligible.loc[eligible["Total_measure_group_cnt"].eq(3), "summary_score"].mean(),
+        "Summary_Score_Nat_peer4": eligible.loc[eligible["Total_measure_group_cnt"].eq(4), "summary_score"].mean(),
+        "Summary_Score_Nat_peer5": eligible.loc[eligible["Total_measure_group_cnt"].eq(5), "summary_score"].mean(),
+    }
+    for key, column in {
+        "OUTCOME_MORTALITY": "Out_Mrt_Grp_Score_Nat",
+        "OUTCOME_SAFETY": "Out_Sft_Grp_Score_Nat",
+        "OUTCOME_READMISSION": "Out_Readm_grp_score_Nat",
+        "PTEXP": "Pt_Exp_Grp_Score_Nat",
+        "PROCESS": "Prc_of_Care_Grp_Score_Nat",
+    }.items():
+        row[column] = groups[key].loc[eligible.index, "grp_score"].mean()
+    return pd.DataFrame([row])
+
+
 def run_pipeline(config: PipelineConfig) -> dict[str, pd.DataFrame]:
     config.output_dir.mkdir(parents=True, exist_ok=True)
     raw = _read_input(config.input_csv)
@@ -151,4 +207,11 @@ def run_pipeline(config: PipelineConfig) -> dict[str, pd.DataFrame]:
     groups = calculate_groups(analysis, config.output_dir)
     summary = calculate_summary(groups)
     summary.to_csv(config.output_dir / "SUMMARY_SCORE.csv", index=False)
-    return {"analysis": analysis, "included_measures": included, **groups, "summary": summary}
+    stars = assign_stars(summary, groups)
+    stars.to_csv(config.output_dir / "STAR_2025JUL.csv", index=False)
+    national = national_averages(stars, groups)
+    national.to_csv(config.output_dir / "NATIONAL_AVERAGE_2025JUL.csv", index=False)
+    return {
+        "analysis": analysis, "included_measures": included, **groups,
+        "summary": summary, "stars": stars, "national": national,
+    }

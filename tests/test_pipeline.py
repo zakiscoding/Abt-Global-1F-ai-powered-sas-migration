@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.migration.pipeline import GROUPS, standardize_measures
+from src.migration.pipeline import GROUPS, assign_stars, standardize_measures
 from src.migration.validation import compare_csv
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,3 +35,21 @@ def test_validation_detects_a_real_difference(tmp_path):
     comparison = compare_csv(expected, actual)
     assert not comparison.passed
     assert "numeric mismatch" in comparison.messages[0]
+
+
+def test_reporting_requires_three_groups_and_mortality_or_safety():
+    summary = pd.DataFrame({
+        "PROVIDER_ID": ["a", "b"],
+        "summary_score": [0.1, 0.2],
+        "Std_Outcomes_Mortality_score": [0.1, 0.2],
+    })
+    groups = {
+        key: pd.DataFrame({
+            "PROVIDER_ID": ["a", "b"],
+            "total_cnt": [3 if key != "PROCESS" else 1, 3],
+            "grp_score": [0.0, 0.0],
+        })
+        for key in GROUPS
+    }
+    result = assign_stars(summary, groups)
+    assert result["report_indicator"].tolist() == [1, 1]
